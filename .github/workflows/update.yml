@@ -1,0 +1,46 @@
+# This workflow downloads https://downloads.nordcdn.com/configs/archives/servers/ovpn.zip
+# decompresses it and updates the repository with the new config files.
+
+name: Update OpenVPN config
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+  push:
+    branches:
+      - "master"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment: Actions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+      - name: Download OpenVPN config
+        run: |
+          set -euo pipefail
+          trap 'rm -f ovpn.zip' EXIT
+          echo 'Downloading OpenVPN config...'
+          curl -sSL https://downloads.nordcdn.com/configs/archives/servers/ovpn.zip -o ovpn.zip
+          echo 'Decompressing OpenVPN config...'
+          shopt -s nullglob
+          rm -f ovpn_tcp/*.ovpn ovpn_udp/*.ovpn
+          shopt -u nullglob
+          unzip -o ovpn.zip >/dev/null 2>&1
+          echo 'Done!'
+      - name: Commit changes
+        run: |
+          git add ovpn_tcp/*.ovpn ovpn_udp/*.ovpn
+          git commit -S -m "Update OpenVPN config" || true
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: master
